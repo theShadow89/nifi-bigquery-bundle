@@ -68,8 +68,7 @@ public class PutBigquery extends AbstractBigqueryProcessor {
             InsertAllRequest.RowToInsert rowToInsert = InsertAllRequest.RowToInsert.of(jsonDocument);
             BigQuery bigQuery = getBigQuery();
 
-            InsertAllRequest insertAllRequest = InsertAllRequest.newBuilder(dataset, table, rowToInsert)
-                    .setIgnoreUnknownValues(true).build();
+            InsertAllRequest insertAllRequest = InsertAllRequest.of(dataset, table, rowToInsert);
 
 
             InsertAllResponse insertAllResponse = bigQuery.insertAll(insertAllRequest);
