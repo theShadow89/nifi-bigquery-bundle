@@ -74,6 +74,7 @@ public class PutBigquery extends AbstractBigqueryProcessor {
             InsertAllResponse insertAllResponse = bigQuery.insertAll(insertAllRequest);
 
             if (insertAllResponse.hasErrors()) {
+            	flowFile = session.putAttribute(flowFile, "error_message", insertAllResponse.getInsertErrors().toString());
                 session.transfer(flowFile, REL_FAILURE);
             } else {
                 session.transfer(flowFile, REL_SUCCESS);
@@ -82,6 +83,7 @@ public class PutBigquery extends AbstractBigqueryProcessor {
 
         } catch (IOException ioe) {
             getLogger().error("IOException while reading JSON item: " + ioe.getMessage());
+            flowFile = session.putAttribute(flowFile, "error_message", "IOException while reading JSON item: " + ioe.getMessage());
             session.transfer(flowFile, REL_FAILURE);
         }
 
