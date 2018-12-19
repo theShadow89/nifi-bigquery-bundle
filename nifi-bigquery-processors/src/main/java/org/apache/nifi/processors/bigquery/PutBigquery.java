@@ -1,19 +1,11 @@
 package org.apache.nifi.processors.bigquery;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.api.client.json.JsonObjectParser;
-import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryError;
 import com.google.cloud.bigquery.InsertAllRequest;
 import com.google.cloud.bigquery.InsertAllResponse;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonIOException;
-import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -25,8 +17,6 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.processors.bigquery.utils.JsonParserUtils;
-import org.apache.nifi.processors.bigquery.utils.NotNullValuesHashMap;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
@@ -39,9 +29,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.TimeZone;
-import java.util.logging.Logger;
 
 @SupportsBatching
 @Tags({"Google", "BigQuery", "Google Cloud", "Put", "Insert"})
@@ -66,7 +54,8 @@ public class PutBigquery extends AbstractBigqueryProcessor {
 
     public static final List<PropertyDescriptor> properties = Collections.unmodifiableList(
             Arrays.asList(SERVICE_ACCOUNT_CREDENTIALS_JSON, READ_TIMEOUT, CONNECTION_TIMEOUT, PROJECT, DATASET, TABLE));
-
+    
+    public final int batch_size = 1000;
 
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
@@ -92,7 +81,7 @@ public class PutBigquery extends AbstractBigqueryProcessor {
 
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-        List<FlowFile> flowFiles = session.get(1000);
+        List<FlowFile> flowFiles = session.get(batch_size);
         
         List<InsertAllRequest.RowToInsert> rowsToInsert = new ArrayList<>();
         List<FlowFile> flowFilesToInsert = new ArrayList<>();
@@ -124,36 +113,34 @@ public class PutBigquery extends AbstractBigqueryProcessor {
 		}
     	
     	if ( !rowsToInsert.isEmpty() ) {
-    		InsertAllRequest insertAllRequest = InsertAllRequest.of(dataset, table, rowsToInsert);
-    		session.transfer(flowFilesToInsert.get(0), REL_SUCCESS);
+    		InsertAllRequest  insertAllRequest  = InsertAllRequest.of(dataset, table, rowsToInsert);
         	InsertAllResponse insertAllResponse = getBigQuery().insertAll(insertAllRequest);
         	
-//        	for ( int index = 0; index < flowFilesToInsert.size(); index++ ) {
-//        		List<BigQueryError> errors = insertAllResponse.getErrorsFor(index);
-//        		FlowFile flowFile = flowFilesToInsert.get(index);
-//        		
-//        		if ( errors.isEmpty() ) {
-//        			session.transfer(flowFile, REL_SUCCESS);
-//        		} else {
-//        			String content = listOfContent.get(index).toString();
-//        			
-//        			flowFile = session.write(flowFile, new OutputStreamCallback() {
-//						@Override
-//						public void process(OutputStream out) throws IOException {
-//							JSONObject json = new JSONObject();
-//							
-//							json.put("errors", formatBigqueryErrors(errors));
-//							json.put("content", content);
-//							json.put("created_at", created_at());
-//									
-//							out.write(json.toString().getBytes());
-//						}
-//					});
-//        			
-//        			session.transfer(flowFile, REL_FAILURE);
-//        		}
-//        	}
+        	for ( int index = 0; index < flowFilesToInsert.size(); index++ ) {
+        		List<BigQueryError> errors = insertAllResponse.getErrorsFor(index);
+        		FlowFile flowFile = flowFilesToInsert.get(index);
+        		
+        		if ( errors.isEmpty() ) {
+        			session.transfer(flowFile, REL_SUCCESS);
+        		} else {
+        			String content = listOfContent.get(index).toString();
+        			
+        			flowFile = session.write(flowFile, new OutputStreamCallback() {
+						@Override
+						public void process(OutputStream out) throws IOException {
+							JSONObject json = new JSONObject();
+							
+							json.put("errors", formatBigqueryErrors(errors));
+							json.put("content", content);
+							json.put("created_at", created_at());
+									
+							out.write(json.toString().getBytes());
+						}
+					});
+        			
+        			session.transfer(flowFile, REL_FAILURE);
+        		}
+        	}
     	}
-
     }
 }
