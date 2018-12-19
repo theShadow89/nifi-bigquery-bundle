@@ -110,16 +110,19 @@ public class PutBigquery extends AbstractBigqueryProcessor {
         		listOfContent.add(jsonDocument);
     		} catch (IOException e) {
 				getLogger().error("IOException while reading JSON item: " + e.getMessage());
+				flowFile = session.putAttribute(flowFile, "error_message", "IOException while reading JSON item: " + e.getMessage());
                 session.transfer(flowFile, REL_FAILURE);
     		} catch (JsonIOException e) {
 				getLogger().error("JsonIOException while reading JSON item: " + e.getMessage());
+				flowFile = session.putAttribute(flowFile, "error_message", "JsonIOException while reading JSON item: " + e.getMessage());
                 session.transfer(flowFile, REL_FAILURE);
 			} catch (JsonSyntaxException e) {
 				getLogger().error("JsonSyntaxException while reading JSON item: " + e.getMessage());
+				flowFile = session.putAttribute(flowFile, "error_message", "JsonSyntaxException while reading JSON item: " + e.getMessage());
                 session.transfer(flowFile, REL_FAILURE);
 			}
 		}
-//    	
+    	
     	if ( !rowsToInsert.isEmpty() ) {
     		InsertAllRequest insertAllRequest = InsertAllRequest.of(dataset, table, rowsToInsert);
     		session.transfer(flowFilesToInsert.get(0), REL_SUCCESS);
