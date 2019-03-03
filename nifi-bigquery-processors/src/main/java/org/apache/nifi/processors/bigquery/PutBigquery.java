@@ -10,6 +10,7 @@ import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.PropertyValue;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -52,41 +53,59 @@ public class PutBigquery extends AbstractBigqueryProcessor {
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
+    static final PropertyDescriptor BATCH_SIZE = new PropertyDescriptor.Builder()
+			.name("Bigquery Insert Batch Size")
+			.description("The max number of flow files to insert in a table in one request. " +
+					"Default is 500 as recommended by bigquery quota documentation.")
+			.required(true)
+			.defaultValue("500")
+			.addValidator(StandardValidators.INTEGER_VALIDATOR)
+			.build();
+
     public static final List<PropertyDescriptor> properties = Collections.unmodifiableList(
-            Arrays.asList(SERVICE_ACCOUNT_CREDENTIALS_JSON, READ_TIMEOUT, CONNECTION_TIMEOUT, PROJECT, DATASET, TABLE));
-    
-    public final int batch_size = 1000;
+            Arrays.asList(SERVICE_ACCOUNT_CREDENTIALS_JSON, READ_TIMEOUT, CONNECTION_TIMEOUT, PROJECT, DATASET, TABLE,BATCH_SIZE));
+
 
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         return properties;
     }
-    
+
     private List<String> formatBigqueryErrors(List<BigQueryError> errors) {
     	List<String> errorsString = new ArrayList<>();
     	for (BigQueryError error : errors) { errorsString.add(error.toString()); }
     	return errorsString;
     }
-    
+
     private String created_at() {
     	TimeZone tz = TimeZone.getTimeZone("UTC");
     	DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'");
     	df.setTimeZone(tz);
     	return df.format(new Date());
     }
-    
-    private JSONObject parseJson(InputStream jsonStream) throws JsonIOException, JsonSyntaxException, IOException {   	
+
+    private JSONObject parseJson(InputStream jsonStream) throws JsonIOException, JsonSyntaxException, IOException {
     	return new JSONObject(JsonParserUtils.fromStream(jsonStream).toString());
     }
 
+	/**
+	 * @return configured batch size or 1
+	 */
+	private Integer batchSize(ProcessContext context){
+		PropertyValue batchSizeProperty = context.getProperty(BATCH_SIZE);
+    	return batchSizeProperty.asInteger();
+	}
+
     @Override
     public void onTrigger(ProcessContext context, ProcessSession session) throws ProcessException {
-        List<FlowFile> flowFiles = session.get(batch_size);
-        
+		Integer batchSize = batchSize(context);
+
+        List<FlowFile> flowFiles = session.get(batchSize);
+
         List<InsertAllRequest.RowToInsert> rowsToInsert = new ArrayList<>();
         List<FlowFile> flowFilesToInsert = new ArrayList<>();
         List<JSONObject> listOfContent = new ArrayList<>();
-        
+
         final String table = context.getProperty(TABLE).getValue();
         final String dataset = context.getProperty(DATASET).getValue();
 
@@ -111,33 +130,33 @@ public class PutBigquery extends AbstractBigqueryProcessor {
                 session.transfer(flowFile, REL_FAILURE);
 			}
 		}
-    	
+
     	if ( !rowsToInsert.isEmpty() ) {
     		InsertAllRequest  insertAllRequest  = InsertAllRequest.of(dataset, table, rowsToInsert);
         	InsertAllResponse insertAllResponse = getBigQuery().insertAll(insertAllRequest);
-        	
+
         	for ( int index = 0; index < flowFilesToInsert.size(); index++ ) {
         		List<BigQueryError> errors = insertAllResponse.getErrorsFor(index);
         		FlowFile flowFile = flowFilesToInsert.get(index);
-        		
+
         		if ( errors.isEmpty() ) {
         			session.transfer(flowFile, REL_SUCCESS);
         		} else {
         			String content = listOfContent.get(index).toString();
-        			
+
         			flowFile = session.write(flowFile, new OutputStreamCallback() {
 						@Override
 						public void process(OutputStream out) throws IOException {
 							JSONObject json = new JSONObject();
-							
+
 							json.put("errors", formatBigqueryErrors(errors));
 							json.put("content", content);
 							json.put("created_at", created_at());
-									
+
 							out.write(json.toString().getBytes());
 						}
 					});
-        			
+
         			session.transfer(flowFile, REL_FAILURE);
         		}
         	}

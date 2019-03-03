@@ -6,6 +6,7 @@ import com.google.cloud.bigquery.InsertAllRequest;
 import com.google.cloud.bigquery.InsertAllResponse;
 import org.apache.nifi.util.TestRunner;
 import org.apache.nifi.util.TestRunners;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -35,6 +36,15 @@ public class PutBigqueryTest {
             }
         };
 
+    }
+
+    @Test
+    public void shouldUseDefaultBatchSizeWhenNotProvided() throws Exception {
+        final TestRunner putRunner = TestRunners.newTestRunner(putBigquery);
+
+        int batchSize = putRunner.getProcessContext().getProperty(PutBigquery.BATCH_SIZE).asInteger();
+
+        Assert.assertEquals("Default Batch Size should be 500",500,batchSize);
     }
 
 
