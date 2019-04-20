@@ -19,22 +19,25 @@
     <parent>
         <groupId>org.apache.nifi</groupId>
         <artifactId>nifi-bigquery-bundle</artifactId>
-        <version>0.1</version>
+        <version>0.2.0</version>
     </parent>
 
     <artifactId>nifi-bigquery-nar</artifactId>
-    <version>0.1</version>
+    <version>0.2.0</version>
     <packaging>nar</packaging>
     <properties>
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <source.skip>true</source.skip>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-bigquery-processors</artifactId>
-            <version>0.1</version>
+            <version>0.2.0</version>
         </dependency>
     </dependencies>
 
